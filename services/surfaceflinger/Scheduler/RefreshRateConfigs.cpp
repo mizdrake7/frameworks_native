@@ -557,6 +557,13 @@ auto RefreshRateConfigs::getBestRefreshRateLocked(const std::vector<LayerRequire
         return {bestRefreshRate, kNoSignals};
     };
 
+    bool noFpsScored = std::all_of(scores.begin(), scores.end(),
+                                   [](RefreshRateScore score) { return score.overallScore == 0; });
+    if (noFpsScored) {
+        ALOGV("No fps scored - choose %s", to_string(mActiveModeIt->second->getFps()).c_str());
+        return {mActiveModeIt->second, kNoSignals};
+    }
+
     if (primaryRangeIsSingleRate) {
         // If we never scored any layers, then choose the rate from the primary
         // range instead of picking a random score from the app range.
