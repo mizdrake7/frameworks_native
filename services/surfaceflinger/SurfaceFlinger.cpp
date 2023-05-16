@@ -1976,15 +1976,19 @@ void SurfaceFlinger::setVsyncEnabled(bool enabled) {
 SurfaceFlinger::FenceWithFenceTime SurfaceFlinger::previousFrameFence() {
     const auto now = systemTime();
     const auto vsyncPeriod = mScheduler->getDisplayStatInfo(now).vsyncPeriod;
-    const bool expectedPresentTimeIsTheNextVsync = mExpectedPresentTime - now <= vsyncPeriod;
 
     size_t shift = 0;
-    if (!expectedPresentTimeIsTheNextVsync) {
-        shift = static_cast<size_t>((mExpectedPresentTime - now) / vsyncPeriod);
-        if (shift >= mPreviousPresentFences.size()) {
-            shift = mPreviousPresentFences.size() - 1;
+    const auto& vsyncConfig = mVsyncModulator->getVsyncConfig();
+    if (vsyncConfig.sfOffset >= 0) {
+        shift = 0;
+    } else {
+        const bool expectedPresentTimeIsTheNextVsync = mExpectedPresentTime - now <= vsyncPeriod;
+        if (!expectedPresentTimeIsTheNextVsync) {
+            shift = static_cast<size_t>((mExpectedPresentTime - now) / vsyncPeriod);
+            shift = std::min(shift, mPreviousPresentFences.size() - 1);
         }
     }
+
     ATRACE_FORMAT("previousFrameFence shift=%zu", shift);
     return mPreviousPresentFences[shift];
 }
@@ -2493,8 +2497,12 @@ void SurfaceFlinger::postComposition() {
         glCompositionDoneFenceTime = FenceTime::NO_FENCE;
     }
 
-    for (size_t i = mPreviousPresentFences.size()-1; i >= 1; i--) {
-        mPreviousPresentFences[i] = mPreviousPresentFences[i-1];
+    if (mPreviousPresentFences.size() >= 2) {
+        for (size_t i = mPreviousPresentFences.size() - 1; i >= 1; i--) {
+            mPreviousPresentFences[i] = mPreviousPresentFences[i - 1];
+        }
+    } else {
+        mPreviousPresentFences[1] = mPreviousPresentFences[0];
     }
 
     mPreviousPresentFences[0].fence =
